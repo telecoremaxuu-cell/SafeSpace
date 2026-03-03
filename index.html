@@ -118,39 +118,20 @@
 
         const userId = tg.initDataUnsafe?.user?.id || 123456;
         const userName = tg.initDataUnsafe?.user?.first_name || "Друг";
-        let API_URL = ""; // Будет установлена динамически
+        let API_URL = "https://felicidad-selfsame-veritably.ngrok-free.dev"; 
 
         let privateChatSocket = null;
         let partnerId = null;
 
-        async function initializeApp() {
-            try {
-                // 1. Получаем конфиг с бэкенда. Запрос относительный, т.к. фронт отдает тот же сервер.
-                const configRes = await fetch('/api/config');
-                if (!configRes.ok) throw new Error('Не удалось загрузить конфигурацию');
-                
-                const config = await configRes.json();
-                API_URL = config.backend_url;
-
-                if (!API_URL) {
-                    document.body.innerHTML = '<div class="text-center text-red-500 p-10">КРИТИЧЕСКАЯ ОШИБКА: URL бэкенда не настроен.</div>';
-                    return;
-                }
-                
-                // 2. Теперь, когда у нас есть API_URL, запускаем остальную часть приложения
-                document.getElementById('user-name').innerText = userName;
-                await checkConnection();
-                await updateProgressBar();
-
-            } catch (e) {
-                console.error("Ошибка инициализации:", e);
-                document.body.innerHTML = '<div class="text-center text-red-500 p-10">Не удалось подключиться к серверу. Попробуйте позже.</div>';
-            }
+        async function initApp() {
+            document.getElementById('user-name').innerText = userName;
+            await checkConnection();
+            await updateProgressBar();
         }
 
         async function checkConnection() {
             try {
-                const res = await fetch(`${API_URL}/api/status`);
+                const res = await fetch(`${API_URL}/api/config`);
                 if (res.ok) {
                     const dot = document.getElementById('status-dot');
                     dot.classList.replace('bg-red-500', 'bg-green-500');
