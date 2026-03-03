@@ -99,7 +99,7 @@ def status():
 @app.get("/api/config")
 def get_config():
     return {
-        "webapp_url": os.getenv("WEBAPP_URL"),
+        "webapp_url": os.getenv("WEBAPP_URL"), # Для информации
         "backend_url": os.getenv("BACKEND_URL"),
         "admin_configured": bool(ADMIN_ID)
     }
@@ -139,14 +139,17 @@ def get_user(user_id: int, db: Session = Depends(database.get_db)):
 async def get_task(user_id: int, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
-        # Upsert: если пользователя нет, создаем его.
         user = models.User(id=user_id, current_day=1)
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+        db.add(user); db.commit(); db.refresh(user)
+    
+    # ВАЖНО: Ищем задание строго по текущему дню пользователя
     task = db.query(models.Task).filter(models.Task.day == user.current_day).first()
-    task_text = task.text if task else "Путь завершен!"
-    return {"day": user.current_day, "task": task_text}
+    
+    if not task:
+        return {"day": user.current_day, "task": "Задание на этот день еще не добавлено в базу!"}
+    
+    # Возвращаем поле 'text', так как супер-чек показал, что колонка называется так
+    return {"day": user.current_day, "task": task.text}
 
 @app.post("/api/task/complete/{user_id}")
 async def complete_task(user_id: int, db: Session = Depends(database.get_db)):
