@@ -1,0 +1,25 @@
+﻿<!DOCTYPE html>
+<html lang='ru'>
+<head><meta charset='UTF-8'><script src='https://cdn.tailwindcss.com'></script></head>
+<body class='p-6 bg-[#121212] text-white'>
+    <div id='m'>
+        <h1 class='text-center text-gray-500 italic mb-10 mt-10'>SafeSpace</h1>
+        <button onclick='showSos()' class='w-full bg-[#704241] p-8 rounded-3xl font-bold mb-4'>SOS: ыплеснуть всё</button>
+    </div>
+    <div id='s' style='display:none'>
+        <div id='c' class='h-64 overflow-y-auto bg-gray-900 p-4 rounded-xl mb-4 text-sm'></div>
+        <textarea id='i' class='w-full bg-gray-800 p-4 rounded-xl mb-2' rows='3'></textarea>
+        <button onclick='send()' class='w-full bg-blue-600 p-4 rounded-xl font-bold'>тправить</button>
+    </div>
+    <script>
+        function showSos(){document.getElementById('m').style.display='none';document.getElementById('s').style.display='block';}
+        function send(){
+            let i=document.getElementById('i'), c=document.getElementById('c');
+            if(!i.value)return;
+            c.innerHTML+='<p class=\"text-right mb-2\">'+i.value+'</p>';
+            i.value='';
+            setTimeout(()=>{c.innerHTML+='<p class=\"text-blue-400 mb-2\">Я рядом.</p>'; c.scrollTop=c.scrollHeight;},1000);
+        }
+    </script>
+</body>
+</html>
