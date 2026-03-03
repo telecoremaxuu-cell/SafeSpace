@@ -11,11 +11,15 @@
     <div id='m'>
         <h1 id="user-name" class='text-center text-gray-500 italic mb-10 mt-10 text-xl'>SafeSpace</h1>
         <div class="space-y-4">
-            <button onclick='showScreen("sos")' class='w-full bg-[#704241] p-8 rounded-3xl font-bold shadow-lg active:scale-95 transition-transform text-left flex justify-between items-center'>
+            <button onclick='showScreen("sos")' class='w-full bg-[#704241] p-6 rounded-3xl font-bold shadow-lg active:scale-95 transition-transform text-left flex justify-between items-center'>
                 <span>SOS: Выплеснуть всё</span>
                 <span>→</span>
             </button>
-            <button onclick='showScreen("path")' class='w-full bg-[#5F7D8E] p-8 rounded-3xl font-bold shadow-lg active:scale-95 transition-transform text-left flex justify-between items-center'>
+            <button onclick='showScreen("chat")' class='w-full bg-[#4A6741] p-6 rounded-3xl font-bold shadow-lg active:scale-95 transition-transform text-left flex justify-between items-center'>
+                <span>Общий чат (Анонимно)</span>
+                <span>→</span>
+            </button>
+            <button onclick='showScreen("path")' class='w-full bg-[#5F7D8E] p-6 rounded-3xl font-bold shadow-lg active:scale-95 transition-transform text-left flex justify-between items-center'>
                 <span>Путь 21 дня</span>
                 <span>→</span>
             </button>
@@ -27,7 +31,16 @@
         <button onclick="location.reload()" class="text-gray-500 mb-4 text-sm w-fit">← Назад</button>
         <div id='c' class='flex-1 overflow-y-auto bg-gray-900/50 p-4 rounded-xl mb-4 text-sm border border-gray-800 shadow-inner space-y-2'></div>
         <textarea id='i' class='w-full bg-gray-800 p-4 rounded-xl mb-2 focus:outline-none focus:ring-2 focus:ring-gray-600 text-white' rows='3' placeholder="Пиши всё..."></textarea>
-        <button id="send-btn" onclick='send()' class='w-full bg-blue-600 p-4 rounded-xl font-bold active:scale-95 transition-all'>Отправить</button>
+        <button onclick='sendSOS()' class='w-full bg-blue-600 p-4 rounded-xl font-bold active:scale-95 transition-all'>Отправить</button>
+    </div>
+
+    <div id='chat-screen' style='display:none' class="flex flex-col h-[90vh]">
+        <button onclick="location.reload()" class="text-gray-500 mb-4 text-sm w-fit">← Назад</button>
+        <div id='chat-box' class='flex-1 overflow-y-auto bg-gray-900/50 p-4 rounded-xl mb-4 text-sm border border-gray-800 shadow-inner space-y-3'></div>
+        <div class="flex space-x-2">
+            <input id='chat-input' class='flex-1 bg-gray-800 p-4 rounded-xl focus:outline-none text-white' placeholder="Написать всем...">
+            <button onclick='sendChatMessage()' class='bg-green-600 px-6 rounded-xl font-bold active:scale-95 transition-all'>📤</button>
+        </div>
     </div>
 
     <div id='p' style='display:none' class="text-center">
@@ -47,8 +60,8 @@
         const userId = user ? user.id : 123456;
         const userName = user ? user.first_name : "Друг";
 
-        // ТВОЯ АКТУАЛЬНАЯ ССЫЛКА NGROK
         let API_URL = "https://felicidad-selfsame-veritably.ngrok-free.dev"; 
+        let chatInterval;
 
         async function initApp() {
             document.getElementById('user-name').innerText = `Привет, ${userName}`;
@@ -58,16 +71,13 @@
 
         async function checkConnection() {
             try {
-                // Проверяем статус бэкенда
                 const res = await fetch(`${API_URL}/api/config`);
                 if (res.ok) {
                     const dot = document.getElementById('status-dot');
                     dot.innerText = "● SafeSpace Online";
-                    dot.classList.remove('text-red-500');
-                    dot.classList.add('text-green-500');
+                    dot.classList.replace('text-red-500', 'text-green-500');
                 }
             } catch (err) {
-                console.log("Ошибка подключения к Ngrok");
                 document.getElementById('status-dot').innerText = "● Ошибка связи";
             }
         }
@@ -79,6 +89,10 @@
             } else if(mode === 'path') {
                 document.getElementById('p').style.display='block';
                 loadTask();
+            } else if(mode === 'chat') {
+                document.getElementById('chat-screen').style.display='flex';
+                loadChat();
+                chatInterval = setInterval(loadChat, 5000); // Обновляем чат каждые 5 секунд
             }
         }
 
@@ -86,31 +100,14 @@
             try { await fetch(`${API_URL}/api/user/${userId}`); } catch (e) {}
         }
 
-        async function loadTask() {
-            try {
-                const res = await fetch(`${API_URL}/api/task/${userId}`);
-                const data = await res.json();
-                document.getElementById('day-num').innerText = data.day;
-                document.getElementById('task-text').innerText = data.task;
-            } catch (e) { document.getElementById('task-text').innerText = "Ошибка загрузки задания"; }
-        }
-
-        async function completeTask() {
-            try {
-                await fetch(`${API_URL}/api/task/complete/${userId}`, {method: 'POST'});
-                loadTask(); 
-            } catch (e) {}
-        }
-
-        async function send(){
+        // --- ЛОГИКА SOS ---
+        async function sendSOS(){
             let i = document.getElementById('i'), c = document.getElementById('c');
             if(!i.value) return;
-
             let text = i.value;
             c.innerHTML += `<div class="text-right"><span class="bg-blue-900/30 p-2 rounded-lg inline-block border border-blue-800/50">${text}</span></div>`;
             i.value = '';
             c.scrollTop = c.scrollHeight;
-
             try {
                 const response = await fetch(`${API_URL}/api/sos`, {
                     method: 'POST',
@@ -118,14 +115,60 @@
                     body: JSON.stringify({message: text})
                 });
                 const data = await response.json();
-                
                 setTimeout(() => {
                     c.innerHTML += `<div class="text-left"><span class="bg-gray-800 p-2 rounded-lg inline-block text-blue-300 border border-gray-700">${data.reply}</span></div>`;
                     c.scrollTop = c.scrollHeight;
                 }, 800);
-            } catch (err) {
-                c.innerHTML += `<div class="text-center text-red-500 text-xs mt-2">Ошибка отправки</div>`;
-            }
+            } catch (err) {}
+        }
+
+        // --- ЛОГИКА ОБЩЕГО ЧАТА ---
+        async function loadChat() {
+            try {
+                const res = await fetch(`${API_URL}/api/messages`);
+                const messages = await res.json();
+                const chatBox = document.getElementById('chat-box');
+                chatBox.innerHTML = messages.map(m => `
+                    <div class="${m.user_id == userId ? 'text-right' : 'text-left'}">
+                        <div class="text-[10px] text-gray-500 mb-1">${m.time}</div>
+                        <span class="${m.user_id == userId ? 'bg-green-900/30 border-green-800/50' : 'bg-gray-800 border-gray-700'} p-2 rounded-lg inline-block border">
+                            ${m.text}
+                        </span>
+                    </div>
+                `).join('');
+            } catch (e) {}
+        }
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            if (!input.value) return;
+            const text = input.value;
+            input.value = '';
+            try {
+                await fetch(`${API_URL}/api/messages/send`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: userId, text: text})
+                });
+                loadChat();
+            } catch (e) {}
+        }
+
+        // --- ЛОГИКА ПУТИ ---
+        async function loadTask() {
+            try {
+                const res = await fetch(`${API_URL}/api/task/${userId}`);
+                const data = await res.json();
+                document.getElementById('day-num').innerText = data.day;
+                document.getElementById('task-text').innerText = data.task;
+            } catch (e) { document.getElementById('task-text').innerText = "Ошибка загрузки"; }
+        }
+
+        async function completeTask() {
+            try {
+                await fetch(`${API_URL}/api/task/complete/${userId}`, {method: 'POST'});
+                loadTask(); 
+            } catch (e) {}
         }
 
         initApp();
