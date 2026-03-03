@@ -1,8 +1,16 @@
-﻿from sqlalchemy import Column, Integer, String
+﻿from sqlalchemy import Column, Integer, String, Text, DateTime
+from datetime import datetime
 from .database import Base
 
 class User(Base):
     __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True) # Это Telegram ID
+    id = Column(Integer, primary_key=True, index=True)
     username = Column(String, nullable=True)
-    current_day = Column(Integer, default=1) # Прогресс (от 1 до 21)
+    current_day = Column(Integer, default=1)
+
+class Message(Base):
+    __tablename__ = "messages"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer)
+    text = Column(Text)
+    timestamp = Column(DateTime, default=datetime.utcnow)

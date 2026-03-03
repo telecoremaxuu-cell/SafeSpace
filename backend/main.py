@@ -92,3 +92,25 @@ async def complete_task(user_id: int, db: Session = Depends(database.get_db)):
         db.commit()
         return {"status": "success", "new_day": user.current_day}
     return {"status": "done"}
+# --- РАЗДЕЛ: АНОНИМНЫЙ ЧАТ ---
+
+@app.get("/api/messages")
+def get_chat_messages(db: Session = Depends(database.get_db)):
+    """Получаем последние 50 сообщений для общего чата"""
+    messages = db.query(models.Message).order_by(models.Message.timestamp.desc()).limit(50).all()
+    # Переворачиваем, чтобы старые были сверху, новые снизу
+    return [{"user_id": m.user_id, "text": m.text, "time": m.timestamp.strftime("%H:%M")} for m in reversed(messages)]
+
+@app.post("/api/messages/send")
+async def send_chat_message(data: dict, db: Session = Depends(database.get_db)):
+    """Сохраняем новое сообщение в базу"""
+    user_id = data.get("user_id")
+    text = data.get("text")
+    
+    if not text or not user_id:
+        return {"status": "error", "message": "Missing data"}
+
+    new_msg = models.Message(user_id=user_id, text=text)
+    db.add(new_msg)
+    db.commit()
+    return {"status": "success"}
