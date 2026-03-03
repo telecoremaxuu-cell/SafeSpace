@@ -1,4 +1,4 @@
-﻿﻿import os
+import os
 import random
 import asyncio
 import httpx
@@ -11,6 +11,7 @@ from .chat_manager import ConnectionManager
 
 # Загружаем переменные окружения
 load_dotenv()
+from fastapi.responses import FileResponse
 
 # Настройки бота для уведомлений
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -87,9 +88,12 @@ SOS_RESPONSES = {
 manager = ConnectionManager()
 
 # --- ЭНДПОИНТЫ ---
-
 @app.get("/")
-def home(): 
+async def read_index():
+    return FileResponse('frontend/index.html')
+
+@app.get("/api/status")
+def status(): 
     return {"status": "SafeSpace Active", "version": "1.1.0"}
 
 @app.get("/api/config")
