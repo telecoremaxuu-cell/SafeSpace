@@ -47,28 +47,28 @@
         const userId = user ? user.id : 123456;
         const userName = user ? user.first_name : "Друг";
 
-        // Это стартовый адрес. Если бэкенд на Ngrok, он сам переключится.
-        let API_URL = "http://127.0.0.1:8000"; 
+        // ТВОЯ АКТУАЛЬНАЯ ССЫЛКА NGROK
+        let API_URL = "https://felicidad-selfsame-veritably.ngrok-free.dev"; 
 
         async function initApp() {
             document.getElementById('user-name').innerText = `Привет, ${userName}`;
-            await loadConfig();
+            await checkConnection();
             checkUser();
         }
 
-        async function loadConfig() {
+        async function checkConnection() {
             try {
-                // Сначала стучимся по базовому адресу за конфигом
+                // Проверяем статус бэкенда
                 const res = await fetch(`${API_URL}/api/config`);
-                const data = await res.json();
-                
-                if (data.backend_url) {
-                    API_URL = data.backend_url; // ВОТ ТУТ МЫ БЕРЕМ ССЫЛКУ ИЗ .ENV
-                    document.getElementById('status-dot').innerText = "● Связь установлена";
-                    document.getElementById('status-dot').classList.replace('text-red-500', 'text-green-500');
+                if (res.ok) {
+                    const dot = document.getElementById('status-dot');
+                    dot.innerText = "● SafeSpace Online";
+                    dot.classList.remove('text-red-500');
+                    dot.classList.add('text-green-500');
                 }
             } catch (err) {
-                console.log("Ждем подключения бэкенда...");
+                console.log("Ошибка подключения к Ngrok");
+                document.getElementById('status-dot').innerText = "● Ошибка связи";
             }
         }
 
@@ -96,8 +96,10 @@
         }
 
         async function completeTask() {
-            await fetch(`${API_URL}/api/task/complete/${userId}`, {method: 'POST'});
-            loadTask(); // Обновляем на следующий день
+            try {
+                await fetch(`${API_URL}/api/task/complete/${userId}`, {method: 'POST'});
+                loadTask(); 
+            } catch (e) {}
         }
 
         async function send(){
@@ -121,7 +123,9 @@
                     c.innerHTML += `<div class="text-left"><span class="bg-gray-800 p-2 rounded-lg inline-block text-blue-300 border border-gray-700">${data.reply}</span></div>`;
                     c.scrollTop = c.scrollHeight;
                 }, 800);
-            } catch (err) {}
+            } catch (err) {
+                c.innerHTML += `<div class="text-center text-red-500 text-xs mt-2">Ошибка отправки</div>`;
+            }
         }
 
         initApp();
