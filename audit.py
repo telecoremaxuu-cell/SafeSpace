@@ -2,6 +2,7 @@
 import re
 import sqlite3
 import subprocess
+import socket
 from datetime import datetime
 
 # Цвета для терминала (чтобы сразу видеть косяки)
@@ -11,7 +12,13 @@ class Colors:
     YELLOW = '\033[93m'
     CYAN = '\033[96m'
     PURPLE = '\033[95m'
+    WHITE = '\033[97m'
     END = '\033[0m'
+
+def check_port(port):
+    """Проверка, запущен ли сервер на самом деле"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
 
 def get_db_stats():
     db_path = 'safespace.db'
@@ -28,34 +35,38 @@ def get_db_stats():
     except Exception as e: return f"{Colors.YELLOW}⚠️ Ошибка: {e}{Colors.END}"
 
 def deep_scan_logic():
-    # Проверка на BOM (частая ошибка)
-    bom_issues = []
-    for root, _, files in os.walk('.'):
-        if any(part in root for part in ['.git', '__pycache__', 'venv']):
-            continue
-        for file in files:
-            if file.endswith(('.py', '.html', '.js', '.css')):
-                path = os.path.join(root, file)
-                with open(path, 'rb') as f:
-                    if f.read(3) == b'\xef\xbb\xbf':
-                        bom_issues.append(f"{Colors.RED}❗ КРИТИЧЕСКАЯ ОШИБКА: Файл {path} сохранен с BOM! Пересохраните в UTF-8.{Colors.END}")
-    if bom_issues: return {}, bom_issues
-
     issues = []
     logic = {"api": [], "calls": []}
     
-    # Сканируем Backend (main.py)
+    # 1. ТОТАЛЬНАЯ ПРОВЕРКА НА BOM (U+FEFF) ПО ВСЕМУ ПРОЕКТУ
+    for root, _, files in os.walk('.'):
+        if any(part in root for part in ['.git', '__pycache__', 'venv', 'env', 'node_modules']):
+            continue
+        for file in files:
+            if file.endswith(('.py', '.html', '.js', '.css', '.env')):
+                path = os.path.join(root, file)
+                try:
+                    with open(path, 'rb') as f:
+                        if f.read(3) == b'\xef\xbb\xbf':
+                            issues.append(f"{Colors.RED}❗ КРИТИЧЕСКАЯ ОШИБКА: Файл {path} сохранен с BOM!{Colors.END}")
+                except: pass
+
+    # 2. Сканируем Backend (main.py)
     if os.path.exists('backend/main.py'):
         with open('backend/main.py', 'r', encoding='utf-8') as f:
             content = f.read()
-            logic["api"] = re.findall(r'@app\.(?:get|post)\("([^"]+)"\)', content)
+            logic["api"] = re.findall(r'@app\.(?:get|post|put|delete)\("([^"]+)"\)', content)
             
             # Проверка ИНТЕЛЛЕКТА (Авто-регистрация)
             has_auto_reg = "db.add" in content and ("if not user" in content or "upsert" in content)
             if not has_auto_reg:
-                issues.append(f"{Colors.RED}❗ ЛОГИЧЕСКАЯ ОШИБКА: Приложение не умеет само добавлять юзеров! (Бэкенд 'тупой'){Colors.END}")
+                issues.append(f"{Colors.RED}❗ ЛОГИЧЕСКАЯ ОШИБКА: Приложение не умеет само добавлять юзеров!{Colors.END}")
+            
+            # Проверка CORS (Критично для работы с телефона)
+            if "CORSMiddleware" not in content:
+                issues.append(f"{Colors.YELLOW}⚠️ БЕЗОПАСНОСТЬ: CORS не настроен. Телефон может не подключиться!{Colors.END}")
 
-    # Сканируем Frontend (index.html)
+    # 3. Сканируем Frontend (index.html)
     if os.path.exists('index.html'):
         with open('index.html', 'r', encoding='utf-8') as f:
             content = f.read()
@@ -66,11 +77,15 @@ def deep_scan_logic():
             # Ищем вызовы fetch
             logic["calls"] = re.findall(r'fetch\([\'\"`]?(?:\${API_URL})?([^?\'\"`\s]+)', content)
             
-            # Проверка UX/UI элементов
-            if "progress-bar" not in content and "progress-fill" not in content:
-                issues.append(f"{Colors.YELLOW}⚠️ ВНИМАНИЕ: На фронтенде не найден Progress Bar прогресса.{Colors.END}")
+            # Проверка Telegram SDK
+            if "telegram-web-app.js" not in content:
+                issues.append(f"{Colors.YELLOW}⚠️ ВНИМАНИЕ: Telegram SDK не найден в index.html!{Colors.END}")
 
-    # Сверяем эндпоинты (Твоя логика)
+    # 4. Проверка активности порта 8000
+    if not check_port(8000):
+        issues.append(f"{Colors.YELLOW}⚠️ СЕТЬ: Сервер (порт 8000) не отвечает. Uvicorn запущен?{Colors.END}")
+
+    # Сверяем эндпоинты
     for call in logic["calls"]:
         clean_call = re.sub(r'\${[^}]+}', '{id}', call).split('?')[0]
         match_found = False
@@ -85,20 +100,20 @@ def deep_scan_logic():
     return logic, issues
 
 def analyze_project():
-    print(f'\n{Colors.CYAN}{"="*60}{Colors.END}')
-    print(f'🚀 {Colors.CYAN}SAFESPACE ULTIMATE INTELLIGENT AUDIT{Colors.END} | {datetime.now().strftime("%d.%m.%Y %H:%M:%S")}')
-    print(f'{Colors.CYAN}{"="*60}{Colors.END}')
+    print(f'\n{Colors.PURPLE}{"#"*60}{Colors.END}')
+    print(f'🚀 {Colors.WHITE}SAFESPACE ULTIMATE COMMANDER AUDIT v5.0{Colors.END} | {datetime.now().strftime("%d.%m.%Y %H:%M:%S")}')
+    print(f'{Colors.PURPLE}{"#"*60}{Colors.END}')
     
     # 1. СТАТУС СИСТЕМЫ
     print(f"\n📡 {Colors.CYAN}СИСТЕМНЫЙ СЛОЙ:{Colors.END}")
     print(f"   ∟ База данных: {get_db_stats()}")
     
     # 2. ПРОВЕРКА СВЯЗЕЙ И ИНТЕЛЛЕКТА
-    print(f"\n🧠 {Colors.CYAN}АНАЛИЗ ЛОГИКИ И СВЯЗНОСТИ:{Colors.END}")
+    print(f"\n🧠 {Colors.CYAN}АНАЛИЗ ЛОГИКИ И СЕТИ:{Colors.END}")
     logic, issues = deep_scan_logic()
     
-    if not issues and logic:
-        print(f"   {Colors.GREEN}✅ Все системы синхронизированы. Авто-регистрация активна.{Colors.END}")
+    if not issues and logic.get("api"):
+        print(f"   {Colors.GREEN}✅ Все системы синхронизированы. Ошибок не обнаружено.{Colors.END}")
     else:
         for issue in issues:
             print(f"   {issue}")
@@ -130,7 +145,7 @@ def analyze_project():
     except:
         print(f"   {Colors.RED}❌ Git не инициализирован или не найден.{Colors.END}")
 
-    print(f'\n{Colors.CYAN}{"="*60}{Colors.END}')
+    print(f'\n{Colors.PURPLE}{"#"*60}{Colors.END}')
 
 if __name__ == "__main__":
     analyze_project()
