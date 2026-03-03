@@ -1,69 +1,84 @@
 ﻿import os
-import ast
 import re
+import sqlite3
+import requests
+import subprocess
+from datetime import datetime
 
-def analyze_python(path):
-    """Извлекает функции и классы из Python-файла"""
+def get_db_stats():
+    """Проверяет состояние базы данных"""
+    db_path = 'safespace.db'
+    if not os.path.exists(db_path):
+        return "❌ БАЗА НЕ СОЗДАНА"
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            tree = ast.parse(f.read())
-        
-        functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
-        classes = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
-        return {"functions": functions, "classes": classes}
-    except Exception:
-        return {"functions": [], "classes": []}
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT count(*) FROM users")
+        count = cursor.fetchone()[0]
+        conn.close()
+        return f"✅ OK (Пользователей в базе: {count})"
+    except Exception as e:
+        return f"⚠️ Ошибка базы: {e}"
 
-def analyze_js(path):
-    """Ищет JS-функции в HTML файле через регулярки"""
+def check_env_health():
+    """Проверяет полноту настроек в .env"""
+    required = ['TELEGRAM_BOT_TOKEN', 'WEBAPP_URL', 'DATABASE_URL']
+    missing = []
+    if not os.path.exists('.env'): return "❌ ФАЙЛ .env ОТСУТСТВУЕТ"
+    with open('.env', 'r') as f:
+        content = f.read()
+        for key in required:
+            if key not in content or len(content.split(f"{key}=")[1].strip()) < 5:
+                missing.append(key)
+    return "✅ OK" if not missing else f"⚠️ ПУСТЫЕ ПОЛЯ: {', '.join(missing)}"
+
+def analyze_project():
+    print(f'--- 🚀 SAFESPACE: ULTRA AUDIT [{datetime.now().strftime("%H:%M:%S")}] ---')
+    
+    # 1. СТАТУС СИСТЕМЫ
+    print("\n📊 СОСТОЯНИЕ СИСТЕМЫ:")
+    print(f"   ∟ База данных:    {get_db_stats()}")
+    print(f"   ∟ Конфиг (.env):  {check_env_health()}")
+    
+    # 2. ПРОВЕРКА КОДА НА ЛОВУШКИ
+    print("\n🔍 АНАЛИЗ КОДА:")
+    checks = {
+        'index.html': [
+            (r'const\s+API_URL\s*=\s*".*127\.0\.0\.1.*"', "⚠️ API_URL смотрит на localhost! На телефоне не откроется."),
+            (r'твой-логин', "⚠️ В ссылке GitHub остался 'твой-логин'!")
+        ],
+        'bot.py': [
+            (r'WEBAPP_URL\s*=\s*".*твой-логин.*"', "⚠️ Бот шлет юзеров на несуществующий домен!")
+        ],
+        'backend/main.py': [
+            (r'allow_origins=\["\*"\]', "✅ CORS настроен (доступ открыт)")
+        ]
+    }
+
+    for file, patterns in checks.items():
+        if os.path.exists(file):
+            with open(file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                for pattern, msg in patterns:
+                    if re.search(pattern, content):
+                        print(f"   [{file}] {msg}")
+        else:
+            print(f"   ❌ Файл {file} не найден!")
+
+    # 3. ГИТ-КОНТРОЛЬ (Не забыл ли ты сделать PUSH?)
+    print("\n📦 ГИТ-КОНТРОЛЬ:")
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            content = f.read()
-        functions = re.findall(r'function\s+([a-zA-Z0-9_]+)\s*\(', content)
-        return {"functions": functions}
-    except Exception:
-        return {"functions": []}
+        status = subprocess.check_output("git status", shell=True).decode()
+        if "branch is ahead" in status:
+            print("   ⚠️ ВНИМАНИЕ: У тебя есть локальные коммиты. Сделай 'git push'!")
+        elif "nothing to commit" in status:
+            print("   ✅ Все изменения сохранены и отправлены.")
+        else:
+            print("   📂 Есть незакоммиченные изменения (сделай git add/commit).")
+    except:
+        print("   ❌ Git не найден.")
 
-files = {
-    'backend/main.py': 'Python (API)',
-    'backend/models.py': 'Python (DB Models)',
-    'backend/database.py': 'Python (DB Config)',
-    'bot.py': 'Python (Telegram Bot)',
-    'frontend/index.html': 'HTML/JS (UI)',
-    '.env': 'Config (Environment)'
-}
+    print('\n' + '='*50)
 
-print('--- 🛠 SAFESPACE: ПОЛНЫЙ АНАЛИЗ ПРОЕКТА ---')
-
-for path, desc in files.items():
-    if os.path.exists(path):
-        size = os.path.getsize(path)
-        print(f"\n✅ {path} ({size} байт) — {desc}")
-        
-        # Анализ содержимого
-        if path.endswith('.py'):
-            data = analyze_python(path)
-            if data['classes']: print(f"   ∟ 🏛 Классы: {', '.join(data['classes'])}")
-            if data['functions']: print(f"   ∟ ⚙️ Функции: {', '.join(data['functions'])}")
-            
-        elif path.endswith('.html'):
-            data = analyze_js(path)
-            if data['functions']: print(f"   ∟ ⚡ JS-Логика: {', '.join(data['functions'])}")
-            
-        elif path == '.env':
-            with open(path, 'r') as f:
-                keys = [line.split('=')[0] for line in f if '=' in line]
-                print(f"   ∟ 🔑 Настройки: {', '.join(keys)}")
-    else:
-        print(f"\n❌ {path} — ФАЙЛ ОТСУТСТВУЕТ")
-
-print('\n' + '='*40)
-print('📂 СТРУКТУРА ПАПОК:')
-for root, dirs, filenames in os.walk('.'):
-    if '.git' in root or '__pycache__' in root: continue
-    level = root.replace('.', '').count(os.sep)
-    indent = ' ' * 4 * (level)
-    print(f'{indent}{os.path.basename(root)}/')
-    subindent = ' ' * 4 * (level + 1)
-    for f in filenames:
-        print(f'{subindent}{f}')
+if __name__ == "__main__":
+    analyze_project()
