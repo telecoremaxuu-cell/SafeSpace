@@ -1,11 +1,13 @@
-﻿﻿﻿﻿import os
+﻿﻿﻿﻿﻿﻿import os
 import random
+import asyncio
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from . import models, database
+from .chat_manager import ConnectionManager
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -98,6 +100,8 @@ TASKS = {
     21: "День 21: Финиш. Оглянись назад. Ты прошел большой путь. Ты — цельный и сильный"
 }
 
+manager = ConnectionManager()
+
 # --- ЭНДПОИНТЫ ---
 
 @app.get("/")
@@ -181,3 +185,26 @@ async def send_chat_message(data: dict, db: Session = Depends(database.get_db)):
     new_msg = models.Message(user_id=u_id, text=clean_text)
     db.add(new_msg); db.commit()
     return {"status": "success"}
+
+# --- ЛОГИКА АНОНИМНОГО ЧАТА (ЭКРАН 4) ---
+
+@app.post("/api/chat/report/{reporter_id}/{offender_id}")
+async def report_user(reporter_id: int, offender_id: int):
+    """Эндпоинт для жалобы на пользователя в приватном чате."""
+    await send_admin_alert(f"Пользователь {reporter_id} пожаловался на пользователя {offender_id} в приватном чате.")
+    return {"status": "report sent"}
+    
+@app.websocket("/ws/chat/{user_id}")
+async def chat_endpoint(websocket: WebSocket, user_id: int):
+    await manager.connect(websocket, user_id)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            if data.get("type") == "message":
+                text = data.get("text", "")
+                if '<' in text or '>' in text or 'http' in text:
+                    await websocket.send_json({"type": "sys_message", "text": "Ссылки и HTML-теги запрещены."})
+                    continue
+                await manager.broadcast(user_id, text)
+    except WebSocketDisconnect:
+        await manager.disconnect(user_id)
