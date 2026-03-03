@@ -1,11 +1,14 @@
 import asyncio
 import os
-import sqlite3
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+# Используем те же модели и сессии, что и в основном приложении
+from backend import models, database
+from sqlalchemy.orm import Session
 
 # 1. Загружаем переменные из .env
 load_dotenv()
@@ -43,21 +46,19 @@ async def start_command(message: types.Message):
 
 async def send_daily_reminders():
     """Раз в сутки отправляет напоминание всем пользователям из базы."""
-    db_path = 'safespace.db'
-    if not os.path.exists(db_path):
-        print("⚠️ БД не найдена, рассылка пропущена.")
-        return
-
+    # Используем SQLAlchemy для консистентного доступа к БД
+    db: Session = database.SessionLocal()
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        # Получаем всех пользователей
-        cursor.execute("SELECT id FROM users")
-        user_ids = [row[0] for row in cursor.fetchall()]
-        conn.close()
+        users = db.query(models.User).all()
+        user_ids = [user.id for user in users]
+        
+        if not user_ids:
+            print("Пользователи в БД не найдены, рассылка пропущена.")
+            return
         
         print(f"Начинаю рассылку для {len(user_ids)} пользователей...")
         sent_count = 0
+
         for user_id in user_ids:
             try:
                 await bot.send_message(
@@ -79,6 +80,8 @@ async def send_daily_reminders():
         print(f"Рассылка завершена. Отправлено {sent_count} сообщений.")
     except Exception as e:
         print(f"⚠️ Ошибка во время рассылки: {e}")
+    finally:
+        db.close()
 
 async def main():
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
