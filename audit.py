@@ -10,6 +10,7 @@ class Colors:
     GREEN = '\033[92m'
     YELLOW = '\033[93m'
     CYAN = '\033[96m'
+    PURPLE = '\033[95m'
     END = '\033[0m'
 
 def get_db_stats():
@@ -27,29 +28,50 @@ def get_db_stats():
     except Exception as e: return f"{Colors.YELLOW}⚠️ Ошибка: {e}{Colors.END}"
 
 def deep_scan_logic():
+    # Проверка на BOM (частая ошибка)
+    bom_issues = []
+    for root, _, files in os.walk('.'):
+        if any(part in root for part in ['.git', '__pycache__', 'venv']):
+            continue
+        for file in files:
+            if file.endswith(('.py', '.html', '.js', '.css')):
+                path = os.path.join(root, file)
+                with open(path, 'rb') as f:
+                    if f.read(3) == b'\xef\xbb\xbf':
+                        bom_issues.append(f"{Colors.RED}❗ КРИТИЧЕСКАЯ ОШИБКА: Файл {path} сохранен с BOM! Пересохраните в UTF-8.{Colors.END}")
+    if bom_issues: return {}, bom_issues
+
     issues = []
     logic = {"api": [], "calls": []}
     
-    # Сканируем Backend
+    # Сканируем Backend (main.py)
     if os.path.exists('backend/main.py'):
         with open('backend/main.py', 'r', encoding='utf-8') as f:
             content = f.read()
             logic["api"] = re.findall(r'@app\.(?:get|post)\("([^"]+)"\)', content)
+            
+            # Проверка ИНТЕЛЛЕКТА (Авто-регистрация)
+            has_auto_reg = "db.add" in content and ("if not user" in content or "upsert" in content)
+            if not has_auto_reg:
+                issues.append(f"{Colors.RED}❗ ЛОГИЧЕСКАЯ ОШИБКА: Приложение не умеет само добавлять юзеров! (Бэкенд 'тупой'){Colors.END}")
 
-    # Сканируем Frontend
+    # Сканируем Frontend (index.html)
     if os.path.exists('index.html'):
         with open('index.html', 'r', encoding='utf-8') as f:
             content = f.read()
-            # ПРОВЕРКА НА LOCALHOST (Твоя прошлая ошибка)
+            # ПРОВЕРКА НА LOCALHOST
             if "127.0.0.1" in content or "localhost" in content:
                 issues.append(f"{Colors.RED}❗ КРИТИЧЕСКАЯ ОШИБКА: В index.html найден 127.0.0.1. Бот не заработает на телефоне!{Colors.END}")
             
             # Ищем вызовы fetch
             logic["calls"] = re.findall(r'fetch\([\'\"`]?(?:\${API_URL})?([^?\'\"`\s]+)', content)
+            
+            # Проверка UX/UI элементов
+            if "progress-bar" not in content and "progress-fill" not in content:
+                issues.append(f"{Colors.YELLOW}⚠️ ВНИМАНИЕ: На фронтенде не найден Progress Bar прогресса.{Colors.END}")
 
-    # Сверяем эндпоинты
+    # Сверяем эндпоинты (Твоя логика)
     for call in logic["calls"]:
-        # Очищаем путь от переменных JS
         clean_call = re.sub(r'\${[^}]+}', '{id}', call).split('?')[0]
         match_found = False
         for api in logic["api"]:
@@ -57,33 +79,33 @@ def deep_scan_logic():
             if re.fullmatch(pattern, clean_call) or clean_call in api:
                 match_found = True
                 break
-        if not match_found and clean_call != "/":
+        if not match_found and clean_call != "/" and not clean_call.startswith('http'):
             issues.append(f"{Colors.YELLOW}⚠️ ВНИМАНИЕ: Frontend вызывает {clean_call}, но в Backend такого эндпоинта нет!{Colors.END}")
 
     return logic, issues
 
 def analyze_project():
     print(f'\n{Colors.CYAN}{"="*60}{Colors.END}')
-    print(f'🚀 {Colors.CYAN}SAFESPACE ULTIMATE AUDIT{Colors.END} | {datetime.now().strftime("%d.%m.%Y %H:%M:%S")}')
+    print(f'🚀 {Colors.CYAN}SAFESPACE ULTIMATE INTELLIGENT AUDIT{Colors.END} | {datetime.now().strftime("%d.%m.%Y %H:%M:%S")}')
     print(f'{Colors.CYAN}{"="*60}{Colors.END}')
     
     # 1. СТАТУС СИСТЕМЫ
     print(f"\n📡 {Colors.CYAN}СИСТЕМНЫЙ СЛОЙ:{Colors.END}")
     print(f"   ∟ База данных: {get_db_stats()}")
     
-    # 2. ПРОВЕРКА СВЯЗЕЙ
-    print(f"\n🧠 {Colors.CYAN}АНАЛИЗ СВЯЗНОСТИ (BACKEND <-> FRONTEND):{Colors.END}")
+    # 2. ПРОВЕРКА СВЯЗЕЙ И ИНТЕЛЛЕКТА
+    print(f"\n🧠 {Colors.CYAN}АНАЛИЗ ЛОГИКИ И СВЯЗНОСТИ:{Colors.END}")
     logic, issues = deep_scan_logic()
     
-    if not issues:
-        print(f"   {Colors.GREEN}✅ Все вызовы фронтенда подтверждены бэкендом.{Colors.END}")
+    if not issues and logic:
+        print(f"   {Colors.GREEN}✅ Все системы синхронизированы. Авто-регистрация активна.{Colors.END}")
     else:
         for issue in issues:
             print(f"   {issue}")
 
-    # 3. ФИЗИЧЕСКАЯ СТРУКТУРА
+    # 3. ФИЗИЧЕСКАЯ СТРУКТУРА (Твоя полная версия)
     print(f"\n📁 {Colors.CYAN}СТРУКТУРА И ВЕС:{Colors.END}")
-    skip = {'.git', '__pycache__', 'venv', 'env'}
+    skip = {'.git', '__pycache__', 'venv', 'env', 'node_modules'}
     for root, dirs, files in os.walk('.'):
         dirs[:] = [d for d in dirs if d not in skip]
         level = root.replace('.', '').count(os.sep)
@@ -91,11 +113,13 @@ def analyze_project():
         print(f'{indent}📁 {os.path.basename(root) or "."}/')
         for f in files:
             f_path = os.path.join(root, f)
-            size = os.path.getsize(f_path)
-            s_str = f"{size}b" if size < 1024 else f"{size/1024:.1f}kb"
-            print(f'{indent}   └── 📄 {f} ({s_str})')
+            try:
+                size = os.path.getsize(f_path)
+                s_str = f"{size}b" if size < 1024 else f"{size/1024:.1f}kb"
+                print(f'{indent}   └── 📄 {f} ({s_str})')
+            except: pass
 
-    # 4. ГИТ
+    # 4. ГИТ (Твоя полная версия)
     print(f"\n📦 {Colors.CYAN}GIT СТАТУС:{Colors.END}")
     try:
         git_res = subprocess.check_output("git status -s", shell=True).decode()
@@ -103,7 +127,8 @@ def analyze_project():
             print(f"   {Colors.YELLOW}📂 Есть незакоммиченные файлы. Пора сделать push!{Colors.END}")
         else:
             print(f"   {Colors.GREEN}✅ Чисто. Все изменения в репозитории.{Colors.END}")
-    except: pass
+    except:
+        print(f"   {Colors.RED}❌ Git не инициализирован или не найден.{Colors.END}")
 
     print(f'\n{Colors.CYAN}{"="*60}{Colors.END}')
 

@@ -1,4 +1,4 @@
-﻿import os
+﻿﻿import os
 import random
 import asyncio
 import httpx
@@ -148,32 +148,45 @@ async def sos_logic(data: dict):
 def get_user(user_id: int, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
+        # Upsert: если пользователя нет, создаем его.
         user = models.User(id=user_id, current_day=1)
-        db.add(user); db.commit(); db.refresh(user)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
     return {"day": user.current_day}
 
 @app.get("/api/task/{user_id}")
 async def get_task(user_id: int, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
+        # Upsert: если пользователя нет, создаем его.
         user = models.User(id=user_id, current_day=1)
-        db.add(user); db.commit(); db.refresh(user)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
     task_text = TASKS.get(user.current_day, "Путь завершен!")
     return {"day": user.current_day, "task": task_text}
 
 @app.post("/api/task/complete/{user_id}")
 async def complete_task(user_id: int, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
-    if user and user.current_day < 21:
+    if not user:
+        # Upsert: если юзер каким-то образом не создался, создаем и засчитываем 1-й день
+        user = models.User(id=user_id, current_day=2) # Сразу ставим 2-й день
+        db.add(user)
+        db.commit()
+    elif user.current_day < 21:
         user.current_day += 1
         db.commit()
-        return {
-            "status": "success", 
-            "new_day": user.current_day,
-            "task": TASKS.get(user.current_day, "Все задания выполнены!"),
-            "percentage": round((user.current_day / 21) * 100)
-        }
-    return {"status": "error"}
+    else: # Пользователь уже завершил все задания
+        return {"status": "error"}
+    
+    return {
+        "status": "success", 
+        "new_day": user.current_day,
+        "task": TASKS.get(user.current_day, "Все задания выполнены!"),
+        "percentage": round((user.current_day / 21) * 100)
+    }
 
 @app.get("/api/messages")
 def get_chat_messages(db: Session = Depends(database.get_db)):
