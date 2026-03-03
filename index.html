@@ -1,4 +1,4 @@
-﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿<!DOCTYPE html>
 <html lang='ru'>
 <head>
     <meta charset='UTF-8'>
@@ -184,9 +184,11 @@
             btn.innerText = "ОБРАБОТКА...";
             try {
                 const res = await fetch(`${API_URL}/api/task/complete/${userId}`, {method: 'POST'});
+                if (!res.ok) throw new Error();
                 const result = await res.json();
                 if(result.status === "success") {
                     await loadTask();
+                    await updateProgressBar();
                     tg.HapticFeedback.notificationOccurred('success');
                     alert("Отлично! День пройден.");
                 }
