@@ -5,19 +5,25 @@ from aiogram.filters import CommandStart
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 
+# 1. Загружаем переменные из .env
 load_dotenv()
 
-# Берем данные из твоего .env
+# 2. Берем данные (теперь строго из .env)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-# Ссылка на твой фронтенд (GitHub Pages)
-WEBAPP_URL = "https://твой-логин.github.io/SafeSpace/" 
+WEBAPP_URL = os.getenv("WEBAPP_URL") 
+
+# Проверка для тебя (выведется в терминале при запуске)
+if not WEBAPP_URL or "твой-логин" in WEBAPP_URL:
+    print("⚠️ ОШИБКА: Проверь файл .env! Ссылка WEBAPP_URL либо пустая, либо содержит 'твой-логин'.")
+else:
+    print(f"✅ Бот запущен. Ссылка из .env: {WEBAPP_URL}")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 @dp.message(CommandStart())
 async def start_command(message: types.Message):
-    # Создаем кнопку для открытия Mini App
+    # Создаем кнопку, которая берет адрес из переменной WEBAPP_URL
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="Войти в SafeSpace 🌿", 
@@ -34,7 +40,7 @@ async def start_command(message: types.Message):
     )
 
 async def main():
-    print("Бот запущен и ждет нажатия /start...")
+    print("Бот ждет нажатия /start в Telegram...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
