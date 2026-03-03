@@ -41,18 +41,22 @@ def get_db_stats():
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = [t[0] for t in cursor.fetchall()]
-        
-        # Проверка структуры (чтобы AM не забыл поля)
-        db_info = ""
+
+        info_parts = []
         if 'users' in tables:
-            cursor.execute("PRAGMA table_info(users)")
-            cols = [c[1] for c in cursor.fetchall()]
             cursor.execute("SELECT count(*) FROM users")
             u_count = cursor.fetchone()[0]
-            db_info = f"(Юзеров: {u_count}, Колонки: {', '.join(cols)})"
-        
+            info_parts.append(f"Юзеров: {u_count}")
+
+        if 'tasks' in tables:
+            cursor.execute("SELECT count(*) FROM tasks")
+            t_count = cursor.fetchone()[0]
+            info_parts.append(f"Заданий: {t_count}")
+
+        info_parts.append(f"Таблицы: {', '.join(tables)}")
+
         conn.close()
-        return f"{Colors.GREEN}✅ OK{Colors.END} {db_info}"
+        return f"{Colors.GREEN}✅ OK{Colors.END} ({'; '.join(info_parts)})"
     except Exception as e: return f"{Colors.YELLOW}⚠️ Ошибка БД: {e}{Colors.END}"
 
 def deep_scan_logic():
