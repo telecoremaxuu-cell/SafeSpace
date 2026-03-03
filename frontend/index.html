@@ -1,25 +1,108 @@
 ﻿<!DOCTYPE html>
 <html lang='ru'>
-<head><meta charset='UTF-8'><script src='https://cdn.tailwindcss.com'></script></head>
+<head>
+    <meta charset='UTF-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src='https://cdn.tailwindcss.com'></script>
+</head>
 <body class='p-6 bg-[#121212] text-white'>
     <div id='m'>
-        <h1 class='text-center text-gray-500 italic mb-10 mt-10'>SafeSpace</h1>
-        <button onclick='showSos()' class='w-full bg-[#704241] p-8 rounded-3xl font-bold mb-4'>SOS: ыплеснуть всё</button>
+        <h1 id="user-name" class='text-center text-gray-500 italic mb-10 mt-10 text-xl'>SafeSpace</h1>
+        <div class="space-y-4">
+            <button onclick='showSos()' class='w-full bg-[#704241] p-8 rounded-3xl font-bold shadow-lg active:scale-95 transition-transform'>SOS: Выплеснуть всё</button>
+            <button onclick='alert("Скоро: Путь 21 дня")' class='w-full bg-[#5F7D8E] p-8 rounded-3xl font-bold shadow-lg active:scale-95 transition-transform'>Путь 21 дня</button>
+        </div>
+        <p id="status-dot" class="text-center text-xs text-red-500 mt-10">● Бэкенд не подключен</p>
     </div>
+
     <div id='s' style='display:none'>
-        <div id='c' class='h-64 overflow-y-auto bg-gray-900 p-4 rounded-xl mb-4 text-sm'></div>
-        <textarea id='i' class='w-full bg-gray-800 p-4 rounded-xl mb-2' rows='3'></textarea>
-        <button onclick='send()' class='w-full bg-blue-600 p-4 rounded-xl font-bold'>тправить</button>
+        <button onclick="location.reload()" class="text-gray-500 mb-4 text-sm">← Назад</button>
+        <div id='c' class='h-80 overflow-y-auto bg-gray-900 p-4 rounded-xl mb-4 text-sm border border-gray-800 shadow-inner'></div>
+        <textarea id='i' class='w-full bg-gray-800 p-4 rounded-xl mb-2 focus:outline-none focus:ring-2 focus:ring-gray-600 text-white' rows='3' placeholder="Пиши всё..."></textarea>
+        <button id="send-btn" onclick='send()' class='w-full bg-blue-600 p-4 rounded-xl font-bold active:scale-95 transition-all'>Отправить</button>
     </div>
+
     <script>
-        function showSos(){document.getElementById('m').style.display='none';document.getElementById('s').style.display='block';}
-        function send(){
-            let i=document.getElementById('i'), c=document.getElementById('c');
-            if(!i.value)return;
-            c.innerHTML+='<p class=\"text-right mb-2\">'+i.value+'</p>';
-            i.value='';
-            setTimeout(()=>{c.innerHTML+='<p class=\"text-blue-400 mb-2\">Я рядом.</p>'; c.scrollTop=c.scrollHeight;},1000);
+        // Инициализация Telegram
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Развернуть окно на максимум
+
+        const user = tg.initDataUnsafe?.user;
+        const userId = user ? user.id : 999;
+        const userName = user ? user.first_name : "Друг";
+
+        // Твой базовый адрес
+        let API_URL = "http://127.0.0.1:8000"; 
+
+        async function initApp() {
+            document.getElementById('user-name').innerText = `Привет, ${userName}`;
+            await loadConfig();
+            // Регистрируем пользователя в БД при входе
+            checkUser();
         }
+
+        async function loadConfig() {
+            try {
+                const res = await fetch(`${API_URL}/api/config`);
+                const data = await res.json();
+                if (data.webapp_url) {
+                    API_URL = data.webapp_url;
+                    document.getElementById('status-dot').innerText = "● Связь с SafeSpace установлена";
+                    document.getElementById('status-dot').classList.replace('text-red-500', 'text-green-500');
+                }
+            } catch (err) {
+                console.error("Бэкенд недоступен");
+            }
+        }
+
+        async function checkUser() {
+            try {
+                const res = await fetch(`${API_URL}/api/user/${userId}`);
+                const data = await res.json();
+                console.log("Пользователь в базе, день:", data.day);
+            } catch (e) { console.log("Ошибка регистрации"); }
+        }
+
+        function showSos(){
+            document.getElementById('m').style.display='none';
+            document.getElementById('s').style.display='block';
+        }
+
+        async function send(){
+            let i = document.getElementById('i'), c = document.getElementById('c');
+            let btn = document.getElementById('send-btn');
+            if(!i.value) return;
+
+            let text = i.value;
+            c.innerHTML += `<div class="text-right mb-2"><span class="bg-red-900/30 p-2 rounded-lg inline-block">${text}</span></div>`;
+            i.value = '';
+            c.scrollTop = c.scrollHeight;
+
+            btn.disabled = true;
+            btn.innerText = "Печатает...";
+
+            try {
+                const response = await fetch(`${API_URL}/api/sos`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: text})
+                });
+                const data = await response.json();
+
+                setTimeout(() => {
+                    c.innerHTML += `<div class="text-left mb-2"><span class="bg-gray-800 p-2 rounded-lg inline-block text-blue-300">${data.reply}</span></div>`;
+                    c.scrollTop = c.scrollHeight;
+                    btn.disabled = false;
+                    btn.innerText = "Отправить";
+                }, 1000);
+            } catch (err) {
+                btn.disabled = false;
+                btn.innerText = "Отправить";
+            }
+        }
+
+        initApp();
     </script>
 </body>
 </html>
